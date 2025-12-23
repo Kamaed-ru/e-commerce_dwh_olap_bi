@@ -6,7 +6,7 @@
 docker compose build
 
 ПОТОМ РАЗВОРАЧИВАЕМ КОНТЕЙНЕРЫ 
-docker compose up -d --scale spark-worker=4
+docker compose up -d
 
 
 airflow - http://localhost:8080/

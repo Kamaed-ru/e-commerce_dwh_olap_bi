@@ -43,13 +43,20 @@ services:
     <<: *airflow-common
     container_name: airflow-init
     depends_on:
-      minio:
-          condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
     command: >
       bash -c "
       airflow db migrate &&
 
       airflow variables set S3_BUCKET \"$S3_BUCKET\" &&
+      airflow variables set DAGS_START_DATE \"$DAGS_START_DATE\" &&
+      
+      airflow connections add minio_s3 \
+      --conn-type aws \
+      --conn-login \"$MINIO_ROOT_USER\" \
+      --conn-password \"$MINIO_ROOT_PASSWORD\" \
+      --conn-extra '{\"endpoint_url\":\"'$S3_ENDPOINT_URL'\",\"region_name\":\"'$AWS_DEFAULT_REGION'\"}' &&
 
       airflow users create \
       --username airflow \
@@ -57,13 +64,7 @@ services:
       --firstname admin \
       --lastname admin \
       --role Admin \
-      --email omashevkamilexample@gmail.com &&
-
-      airflow connections add minio_s3 \
-      --conn-type aws \
-      --conn-login \"$MINIO_ROOT_USER\" \
-      --conn-password \"$MINIO_ROOT_PASSWORD\" \
-      --conn-extra '{\"endpoint_url\":\"'$S3_ENDPOINT_URL'\",\"region_name\":\"'$AWS_DEFAULT_REGION'\"}'
+      --email omashevkamilexample@gmail.com
       "
     restart: "no"
   
@@ -101,7 +102,27 @@ services:
       retries: 5
       start_period: 20s
 
+  minio-init:
+    image: minio/mc:latest
+    container_name: minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
 
+    entrypoint: >
+      /bin/sh -c "
+       
+      mc alias set local ${S3_ENDPOINT_URL} ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD} &&
+
+      mc mb --ignore-existing local/${S3_BUCKET}  
+      "
+
+  spark:
+    image: spark-ephemeral:3.5.7
+    build:
+      context: ./spark
+      dockerfile: Dockerfile
+  
 volumes:
   postgres_data:
   minio_data:
