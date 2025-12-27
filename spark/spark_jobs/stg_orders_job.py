@@ -4,7 +4,7 @@ from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, lit, to_date
 from pyspark.sql.types import (
     StructType, StructField,
-    IntegerType, StringType, DateType
+    IntegerType, StringType, DateType,  LongType
 )
 
 if len(sys.argv) < 2:
@@ -34,7 +34,7 @@ STG_PATH = f"s3a://{bucket}/stg/orders/ingestion_date={ingestion_date}"
 spark.sparkContext.setLogLevel("WARN")
 
 schema = StructType([
-    StructField("order_id", IntegerType(), False),
+    StructField("order_id",  LongType(), False),
     StructField("customer_id", IntegerType(), True),
     StructField("order_date", StringType(), True),
     StructField("order_status", StringType(), True),

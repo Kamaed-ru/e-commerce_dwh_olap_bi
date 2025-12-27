@@ -16,7 +16,7 @@ conn = BaseHook.get_connection("minio_s3")
 env = {
     "AWS_ACCESS_KEY_ID": conn.login,
     "AWS_SECRET_ACCESS_KEY": conn.password,
-    "S3_ENDPOINT_URL": "http://host.docker.internal:9000",
+    "S3_ENDPOINT_URL": conn.extra_dejson.get("endpoint_url"),
     "AWS_DEFAULT_REGION": conn.extra_dejson.get("region_name", "ru-central1"),
     "S3_BUCKET": Variable.get("S3_BUCKET"),
 }
@@ -54,7 +54,7 @@ with DAG(
     schedule_interval="0 10 * * *",
     catchup=True,
     max_active_runs=1,
-    concurrency=4,
+    concurrency=6,
     tags=["stg", "spark", "ephemeral"],
 ) as dag:
 
@@ -66,20 +66,23 @@ with DAG(
         allowed_states=[DagRunState.SUCCESS],
         mode="reschedule",
         timeout=1800,
-        poke_interval=60,
+        poke_interval=10,
     )
   
-
+    stg_cities = spark_task("stg_cities", "stg_cities_job.py", 0.5, "1g")
+    stg_categories = spark_task("stg_categories", "stg_categories_job.py", 0.5, "1g")
     stg_customers = spark_task("stg_customers", "stg_customers_job.py", 1.0, "2g")
     stg_products = spark_task("stg_products", "stg_products_job.py", 1.0, "2g")
     stg_orders = spark_task("stg_orders", "stg_orders_job.py", 2.0, "4g")
-    stg_order_lines = spark_task("stg_order_lines", "stg_order_lines_job.py", 3.0, "6g")
+    stg_order_lines = spark_task("stg_order_lines", "stg_order_lines_job.py", 2.0, "4g")
 
     end = EmptyOperator(task_id="end")
 
     start >> sensor_on_raw_layer >> [
+        stg_cities,
+        stg_categories,
         stg_customers,
-        stg_products,
         stg_orders,
+        stg_products,
         stg_order_lines,
     ] >> end

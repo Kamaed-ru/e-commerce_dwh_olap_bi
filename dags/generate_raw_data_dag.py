@@ -224,38 +224,45 @@ def generate_products(**context):
 
 def generate_orders(**context):
     ds = context["ds"]
-    ts = datetime.utcnow().isoformat()
 
     customers = s3_read_json_gz(f"raw/customers/date={ds}/customers.json.gz")
     products = s3_read_json_gz(f"raw/products/date={ds}/products.json.gz")
 
     active_customers = [c for c in customers if not c["deleted"]]
     active_products = [p for p in products if not p["deleted"]]
+    
+    # --- Учёт вчерашнего максимального order_id ---
+    yesterday = pendulum.parse(ds).subtract(days=1).to_date_string()
+    prev_orders = s3_read_json_gz(f"raw/orders/date={yesterday}/orders.json.gz") or []
+    order_id = max((o["order_id"] for o in prev_orders), default=0)
 
     orders = []
     order_lines = []
 
     for i in range(1, ORDERS_PER_DAY + 1):
-        order_id = i
         customer = random.choice(active_customers)
-
+        order_id += 1
+        
         orders.append(
             {
                 "order_id": order_id,
                 "order_date": ds,
                 "customer_id": customer["customer_id"],
                 "order_status": random.choice(["NEW", "PAID", "SHIPPED"]),
-                "created_at": ts,
+                "created_at": ds,
             }
         )
 
-        for p in random.sample(active_products, random.randint(1, MAX_LINES_PER_ORDER)):
+        for p in range(1, random.randint(1, MAX_LINES_PER_ORDER)):
+            products = random.choice(active_products)
+            
             order_lines.append(
                 {
                     "order_id": order_id,
-                    "product_id": p["product_id"],
+                    "order_line_id": p,
+                    "product_id": products["product_id"],
                     "quantity": random.randint(1, 5),
-                    "price": p["price"],
+                    "price": products["price"],
                 }
             )
 
