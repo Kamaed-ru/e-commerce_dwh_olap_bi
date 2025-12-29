@@ -10,8 +10,6 @@ import pendulum
 OWNER = "omash"
 DAG_ID = "stg_layer"
 
-START_DATE = pendulum.parse(Variable.get("DAGS_START_DATE")).in_timezone("Europe/Moscow")
-
 conn = BaseHook.get_connection("minio_s3")
 env = {
     "AWS_ACCESS_KEY_ID": conn.login,
@@ -25,8 +23,10 @@ conn = BaseHook.get_connection("minio_s3")
 
 args = {
     "owner": OWNER,
+    "start_date": pendulum.parse(Variable.get("DAGS_START_DATE")).in_timezone("Europe/Moscow"),
+    "catchup": True,
     "retries": 2,
-    "retry_delay": pendulum.duration(minutes=5),
+    "retry_delay": pendulum.duration(minutes=1),
 }
 
 def spark_task(task_id, job, cpu, mem):
@@ -50,10 +50,9 @@ def spark_task(task_id, job, cpu, mem):
 with DAG(
     dag_id=DAG_ID,
     default_args=args,
-    start_date=START_DATE,
     schedule_interval="0 10 * * *",
-    catchup=True,
-    max_active_runs=1,
+    max_active_runs= 1,
+    max_active_tasks=6,
     concurrency=6,
     tags=["stg", "spark", "ephemeral"],
 ) as dag:

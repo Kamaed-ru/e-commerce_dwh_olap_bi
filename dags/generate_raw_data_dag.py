@@ -3,7 +3,7 @@ from airflow.operators.python import PythonOperator
 from airflow.operators.empty import EmptyOperator
 from airflow.models import Variable
 from airflow.providers.amazon.aws.hooks.s3 import S3Hook
-from datetime import datetime
+from datetime import datetime, timedelta
 from faker import Faker
 import pendulum
 import json
@@ -31,10 +31,10 @@ MAX_LINES_PER_ORDER = 5
 
 args = {
     "owner": OWNER,
-    "start_date": pendulum.parse(
-        Variable.get("DAGS_START_DATE")
-    ).in_timezone("Europe/Moscow"),
+    "start_date": pendulum.parse(Variable.get("DAGS_START_DATE")).in_timezone("Europe/Moscow"),
     "catchup": True,
+    "retries": 2,
+    "retry_delay": pendulum.duration(minutes=1),
 }
 
 # =========================================================
@@ -108,10 +108,20 @@ def generate_categories():
 # =================== DIMENSIONS ==========================
 # =========================================================
 
-def generate_customers(**context):
-    ds = context["ds"]
-    prev_ds = context["data_interval_start"].subtract(days=1).to_date_string()
+from datetime import datetime, timedelta
 
+def generate_customers(**context):
+    ds = context["ds"]  # YYYY-MM-DD (сегодняшняя дата запуска)
+    ds_date = datetime.strptime(ds, "%Y-%m-%d")
+
+    # регистрация — случайный день в диапазоне [ds - 365 дней, ds]
+    start_reg = ds_date - timedelta(days=365)
+    
+    def random_registration():
+        delta_days = random.randint(0, 365)
+        return (start_reg + timedelta(days=delta_days)).strftime("%Y-%m-%d")
+
+    prev_ds = context["data_interval_start"].subtract(days=1).to_date_string()
     prev_key = f"raw/customers/date={prev_ds}/customers.json.gz"
     curr_key = f"raw/customers/date={ds}/customers.json.gz"
 
@@ -127,7 +137,7 @@ def generate_customers(**context):
                 "city_id": random.randint(1, CITIES_COUNT),
                 "age": random.randint(18, 70),
                 "gender": random.choice(["M", "F"]),
-                "registration_date": ds,
+                "registration_date": random_registration(),
                 "updated_at": ds,
                 "deleted": False,
             }
@@ -137,13 +147,14 @@ def generate_customers(**context):
         customers = prev_customers.copy()
         active = [c for c in customers if not c["deleted"]]
 
-        c = random.choice(active)
-        c["age"] += 1
-        c["updated_at"] = ds
+        if active:
+            rc1, rc2 = random.sample(active, 2) if len(active) > 1 else (active[0], active[0])
 
-        d = random.choice(active)
-        d["deleted"] = True
-        d["updated_at"] = ds
+            rc1["age"] += 1
+            rc1["updated_at"] = ds
+
+            rc2["deleted"] = True
+            rc2["updated_at"] = ds
 
         new_id = max(c["customer_id"] for c in customers) + 1
         customers.append(
@@ -155,7 +166,7 @@ def generate_customers(**context):
                 "city_id": random.randint(1, CITIES_COUNT),
                 "age": random.randint(18, 70),
                 "gender": random.choice(["M", "F"]),
-                "registration_date": ds,
+                "registration_date": random_registration(),
                 "updated_at": ds,
                 "deleted": False,
             }
@@ -278,7 +289,9 @@ with DAG(
     default_args=args,
     schedule_interval="0 10 * * *",
     tags=["generator", "raw"],
-    max_active_runs=1,
+    max_active_runs= 1,
+    max_active_tasks=6,
+    concurrency=6
 ) as dag:
 
     start = EmptyOperator(task_id="start")
@@ -293,7 +306,5 @@ with DAG(
 
     end = EmptyOperator(task_id="end")
 
-    start >> [gen_cities, gen_categories]
-    gen_cities >> gen_customers
-    gen_categories >> gen_products
-    [gen_customers, gen_products] >> gen_orders >> end
+    start >> [gen_cities, gen_categories, gen_customers, gen_products] >> gen_orders >> end
+
