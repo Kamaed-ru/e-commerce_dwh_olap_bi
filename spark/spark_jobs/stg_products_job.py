@@ -41,7 +41,7 @@ schema = StructType([
     StructField("product_name", StringType(), True),
     StructField("category_id", IntegerType(), True),
     StructField("price", DecimalType(10, 2), True),
-    StructField("weight_kg", DoubleType(), True),
+    StructField("weight", DecimalType(10, 2), True),
     StructField("updated_at", StringType(), True),
     StructField("deleted", BooleanType(), True),
 ])

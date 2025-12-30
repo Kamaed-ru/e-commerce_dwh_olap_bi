@@ -6,7 +6,7 @@ from airflow.models import Variable
 import pendulum
 
 OWNER = "omash"
-DAG_ID = "mart_layer_dag"
+DAG_ID = "mart_layer"
 
 args = {
     "owner": OWNER,

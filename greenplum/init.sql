@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS core.products (
     product_name VARCHAR(80),
     category_id INT,
     price DECIMAL(10,2),
-    weight_kg FLOAT,
+    weight DECIMAL(10,2),
     updated_at DATE,
     deleted BOOLEAN,
     valid_from DATE,
@@ -261,7 +261,7 @@ BEGIN
             product_name VARCHAR(80),
             category_id INT,
             price DECIMAL(10,2),
-            weight_kg FLOAT,
+            weight DECIMAL(10,2),
             updated_at DATE,
             deleted BOOLEAN
         )
@@ -296,17 +296,17 @@ BEGIN
            t.product_name <> s.product_name
         OR t.category_id <> s.category_id
         OR t.price <> s.price
-        OR t.weight_kg <> s.weight_kg
+        OR t.weight <> s.weight
         OR t.deleted <> s.deleted
       );
 
     INSERT INTO core.products (
-        product_id, product_name, category_id, price, weight_kg,
+        product_id, product_name, category_id, price, weight,
         updated_at, deleted,
         valid_from, valid_to, is_current
     )
     SELECT
-        s.product_id, s.product_name, s.category_id, s.price, s.weight_kg,
+        s.product_id, s.product_name, s.category_id, s.price, s.weight,
         s.updated_at, s.deleted,
         p_date, '9999-12-31', TRUE
     FROM core.products_ext s
@@ -428,7 +428,12 @@ CREATE TABLE mart.daily_sales (
     load_date DATE DEFAULT CURRENT_DATE
 )
 WITH (appendoptimized = true, orientation = column)
-DISTRIBUTED BY (sales_date, city_id, product_id);
+DISTRIBUTED BY (sales_date, city_id, product_id)
+PARTITION BY RANGE (sales_date) (
+    START (DATE '2025-01-01')
+    END   (DATE '2026-05-01')
+    EVERY (INTERVAL '1 week')
+);
 -------------------------------------------------------------------------------------------
 CREATE TABLE mart.customer_ltv (
     customer_id INT NOT NULL,
@@ -455,7 +460,12 @@ CREATE TABLE mart.product_popularity (
     popularity_rank INT,
     revenue_share DECIMAL(5,2),
     load_date DATE DEFAULT CURRENT_DATE
-) DISTRIBUTED BY (product_id);
+) DISTRIBUTED BY (product_id)
+PARTITION BY RANGE (load_date) (
+    START (DATE '2025-01-01')
+    END   (DATE '2026-05-01')
+    EVERY (INTERVAL '1 week')
+);
 -------------------------------------------------------------------------------------------
 CREATE TABLE mart.retention_metrics (
     cohort_month DATE NOT NULL,
@@ -464,7 +474,12 @@ CREATE TABLE mart.retention_metrics (
     retained_count BIGINT,
     retention_rate DECIMAL(5,2),
     load_date DATE DEFAULT CURRENT_DATE
-) DISTRIBUTED BY (cohort_month);
+) DISTRIBUTED BY (cohort_month)
+PARTITION BY RANGE (load_date) (
+    START (DATE '2025-01-01')
+    END   (DATE '2026-05-01')
+    EVERY (INTERVAL '1 week')
+);
 -------------------------------------------------------------------------------------------
 -------------------------------------------------------------------------------------------
 -- FILL FUNCTIONS FOR MART TABLES

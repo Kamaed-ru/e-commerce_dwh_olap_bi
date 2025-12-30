@@ -72,7 +72,15 @@ services:
       --firstname admin \
       --lastname admin \
       --role Admin \
-      --email omashevkamilexample@gmail.com
+      --email omashevkamilexample@gmail.com &&
+
+      airflow connections add clickhouse_default \
+      --conn-type sqlite \
+      --conn-host "$CLICKHOUSE_HOST" \
+      --conn-login "$CLICKHOUSE_USER" \
+      --conn-password "$CLICKHOUSE_PASSWORD" \
+      --conn-port "9000" \
+      --conn-schema "$CLICKHOUSE_DB"
       "
     restart: "no"
   
@@ -138,24 +146,48 @@ services:
       - GREENPLUM_DATABASE_NAME=${GREENPLUM_DB}
       - GPADMIN_USER=${GPADMIN_USER}
       - GREENPLUM_PASSWORD=${GPADMIN_PASSWORD}
-      - GREENPLUM_PXF_ENABLE=true   # включает PXF
+      - GREENPLUM_PXF_ENABLE=true
       - S3_ENDPOINT_URL=${S3_ENDPOINT_URL}
       - MINIO_ROOT_USER=${MINIO_ROOT_USER}
       - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
       - TZ=Etc/UTC
     ports:
-      - "5432:5432"   # PostgreSQL/Greenplum
-      - "5888:5888"   # PXF сервис
+      - "5432:5432"
+      - "5888:5888"
     volumes:
-      - ./greenplum:/docker-entrypoint-initdb.d   # твои инициализационные скрипты
+      - ./greenplum:/docker-entrypoint-initdb.d
       - greenplum_data:/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U gpadmin -d ${GREENPLUM_DATABASE_NAME}"]
+      test: ["CMD-SHELL", "pg_isready -U gpadmin -d ${GREENPLUM_DB}"]
       interval: 5s
       retries: 5
-  
-  
+
+
+  clickhouse:
+    image: clickhouse:25.8
+    container_name: clickhouse
+    environment:
+      - CLICKHOUSE_HOST=${CLICKHOUSE_HOST}
+      - CLICKHOUSE_DB=${CLICKHOUSE_DB}
+      - CLICKHOUSE_USER=${CLICKHOUSE_USER}
+      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD}
+    ulimits:
+      nofile:
+        soft: 202144
+        hard: 202144
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - clickhouse_logs:/var/log/clickhouse-server
+      - ./clickhouse:/docker-entrypoint-initdb.d
+    ports:
+      - "${CLICKHOUSE_PORT}:9000"   # Native TCP ClickHouse
+      - "8123:8123"                # HTTP интерфейс
+      - "9009:9009"                # Интерфейс для SQL через CLI / драйверы
+
 volumes:
   postgres_data:
   minio_data:
   greenplum_data:
+  clickhouse_data:
+  clickhouse_logs:
+
